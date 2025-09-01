@@ -1,30 +1,32 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { init, dispose, registerIndicator } from 'klinecharts'
-import calculate from "../indicators/bollinger"
+import calculate from '../indicators/bollinger'
 
-type Settings = {
+type Source = 'open' | 'high' | 'low' | 'close'
+
+export type Settings = {
     length: number
-    source: string
+    source: Source
     stdDev: number
     offset: number
     dark: boolean
 }
 
-type StyleSettings = {
+export type StyleSettings = {
     basisVisible: boolean
     basisColor: string
     basisWidth: number
-    basisStyle: string
+    basisStyle: 'solid' | 'dashed' | 'dotted'
     upperVisible: boolean
     upperColor: string
     upperWidth: number
-    upperStyle: string
+    upperStyle: 'solid' | 'dashed' | 'dotted'
     lowerVisible: boolean
     lowerColor: string
     lowerWidth: number
-    lowerStyle: string
+    lowerStyle: 'solid' | 'dashed' | 'dotted'
     backgroundVisible: boolean
     backgroundColor: string
     backgroundOpacity: number
@@ -32,24 +34,40 @@ type StyleSettings = {
 
 const IND_NAME = 'Bollinger Bands'
 
+interface ChartAPI {
+    setStyles: (theme: 'dark' | 'light') => void
+    applyNewData: (data: unknown[]) => void
+    getIndicators?: () => Array<{ id: string; name: string }>
+    removeIndicator?: (opts: { id: string }) => void
+    createIndicator?: (opts: { name: string; calcParams?: unknown[] }) => string | null
+    dispose?: (id?: string) => void
+}
+
 export default function Chart({
     settings,
     styleSettings,
-    showIndicator
+    showIndicator,
 }: {
     settings: Settings
     styleSettings: StyleSettings
     showIndicator: boolean
 }) {
-    const [chartData, setChartData] = useState<any[] | null>(null)
-    const chartRef = useRef<any | null>(null)
-    const registeredRef = useRef(false)
+    const [chartData, setChartData] = useState<Array<Record<string, unknown>> | null>(null)
 
-    const mapLineStyle = (styleStr: string) => {
-        if (styleStr === 'dashed') return { style: 'dashed', dashedValue: [6, 4] }
-        if (styleStr === 'dotted') return { style: 'dashed', dashedValue: [2, 4] }
-        return { style: 'solid', dashedValue: [] }
-    }
+    const chartRef = useRef<ChartAPI | null>(null)
+    const registeredRef = useRef(false)
+    const styleRef = useRef<StyleSettings>(styleSettings)
+
+    useEffect(() => {
+        styleRef.current = styleSettings
+    }, [styleSettings])
+
+    const mapLineStyle = (styleStr: StyleSettings['basisStyle']) =>
+        styleStr === 'dashed'
+            ? { style: 'dashed', dashedValue: [6, 4] as number[] }
+            : styleStr === 'dotted'
+                ? { style: 'dashed', dashedValue: [2, 4] as number[] }
+                : { style: 'solid', dashedValue: [] as number[] }
 
     const hexToRgba = (hex: string, alpha: number) => {
         const r = parseInt(hex.slice(1, 3), 16)
@@ -58,63 +76,150 @@ export default function Chart({
         return `rgba(${r}, ${g}, ${b}, ${alpha})`
     }
 
-    // Register indicator once
     useEffect(() => {
-        if (!registeredRef.current) {
-            try {
-                registerIndicator({
-                    name: IND_NAME,
-                    shortName: 'BB',
-                    series: 'price',
-                    calcParams: [20, 'close', 2, 0],
-                    calc: (kLineDataList: any[], indicator: any) => {
-                        const params = indicator?.calcParams || [20, 'close', 2, 0]
-                        const [length, source, stdDev, offset] = params
-                        return calculate(kLineDataList, { length, source, stdDev, offset })
+        if (registeredRef.current) return
+
+        try {
+            registerIndicator({
+                name: IND_NAME,
+                shortName: 'BB',
+                series: 'price',
+                calcParams: [20, 'close', 2, 0],
+                calc: (kLineDataList: unknown[], indicator: { calcParams?: unknown[] }) => {
+                    const params = (indicator?.calcParams as unknown[]) ?? [20, 'close', 2, 0]
+                    const length = Number(params[0]) || 20
+                    const source = String(params[1] ?? 'close') as Source
+                    const stdDev = Number(params[2]) || 2
+                    const offset = Number(params[3]) || 0
+                    return calculate(kLineDataList, { length, source, stdDev, offset })
+                },
+                figures: [
+                    {
+                        key: 'basis',
+                        type: 'line',
+                        title: 'Basis',
+                        styles: {
+                            color: '#2962FF',
+                            size: 2,
+                        },
                     },
-                    figures: [
+                    {
+                        key: 'upper',
+                        type: 'line',
+                        title: 'Upper',
+                        styles: {
+                            color: '#FF6D00',
+                            size: 1,
+                        },
+                    },
+                    {
+                        key: 'lower',
+                        type: 'line',
+                        title: 'Lower',
+                        styles: {
+                            color: '#2962FF',
+                            size: 1,
+                        },
+                    },
+                    {
+                        key: 'background',
+                        type: 'polygon',
+                        title: 'Background',
+                        styles: {
+                            color: 'rgba(41, 98, 255, 0.1)',
+                            borderColor: 'transparent',
+                        },
+                        draw: ({ ctx, data, from, to, styles }: { ctx: CanvasRenderingContext2D; data: any[]; from: number; to: number; styles: { color: string } }) => {
+                            if (!data || data.length === 0) return
+                            ctx.fillStyle = styles.color
+                            ctx.beginPath()
+
+                            let started = false
+                            for (let i = from; i < to; i++) {
+                                const item = data[i]
+                                if (item && item.upper !== undefined) {
+                                    const x = item.x
+                                    const y = item.upper
+                                    if (!started) {
+                                        ctx.moveTo(x, y)
+                                        started = true
+                                    } else {
+                                        ctx.lineTo(x, y)
+                                    }
+                                }
+                            }
+
+                            for (let i = to - 1; i >= from; i--) {
+                                const item = data[i]
+                                if (item && item.lower !== undefined) {
+                                    ctx.lineTo(item.x, item.lower)
+                                }
+                            }
+
+                            ctx.closePath()
+                            ctx.fill()
+                        },
+                    },
+                ],
+                regenerateFigures: (params: unknown[]) => {
+                    const stylesNow = styleRef.current
+
+                    return [
                         {
                             key: 'basis',
                             type: 'line',
                             title: 'Basis',
-                            styles: {
-                                color: '#2962FF',
-                                size: 2
-                            }
+                            styles: () => {
+                                const mapped = mapLineStyle(stylesNow.basisStyle)
+                                return {
+                                    ...mapped,
+                                    color: stylesNow.basisVisible ? stylesNow.basisColor : 'transparent',
+                                    size: stylesNow.basisWidth,
+                                }
+                            },
                         },
                         {
                             key: 'upper',
                             type: 'line',
                             title: 'Upper',
-                            styles: {
-                                color: '#FF6D00',
-                                size: 1
-                            }
+                            styles: () => {
+                                const mapped = mapLineStyle(stylesNow.upperStyle)
+                                return {
+                                    ...mapped,
+                                    color: stylesNow.upperVisible ? stylesNow.upperColor : 'transparent',
+                                    size: stylesNow.upperWidth,
+                                }
+                            },
                         },
                         {
                             key: 'lower',
                             type: 'line',
                             title: 'Lower',
-                            styles: {
-                                color: '#2962FF',
-                                size: 1
-                            }
+                            styles: () => {
+                                const mapped = mapLineStyle(stylesNow.lowerStyle)
+                                return {
+                                    ...mapped,
+                                    color: stylesNow.lowerVisible ? stylesNow.lowerColor : 'transparent',
+                                    size: stylesNow.lowerWidth,
+                                }
+                            },
                         },
                         {
                             key: 'background',
                             type: 'polygon',
                             title: 'Background',
-                            styles: {
-                                color: 'rgba(41, 98, 255, 0.1)',
-                                borderColor: 'transparent'
-                            },
-                            draw: ({ ctx, data, from, to, styles }) => {
-                                if (!data || data.length === 0) return
+                            styles: () => ({
+                                color: stylesNow.backgroundVisible
+                                    ? hexToRgba(stylesNow.backgroundColor, stylesNow.backgroundOpacity / 100)
+                                    : 'transparent',
+                                borderColor: 'transparent',
+                            }),
+                            draw: ({ ctx, data, from, to }: { ctx: CanvasRenderingContext2D; data: any[]; from: number; to: number }) => {
+                                if (!data || data.length === 0 || !styleRef.current.backgroundVisible) return
 
-                                ctx.fillStyle = styles.color
+                                ctx.fillStyle = hexToRgba(styleRef.current.backgroundColor, styleRef.current.backgroundOpacity / 100)
                                 ctx.beginPath()
 
-                                // Draw upper line
                                 let started = false
                                 for (let i = from; i < to; i++) {
                                     const item = data[i]
@@ -130,7 +235,6 @@ export default function Chart({
                                     }
                                 }
 
-                                // Draw lower line in reverse
                                 for (let i = to - 1; i >= from; i--) {
                                     const item = data[i]
                                     if (item && item.lower !== undefined) {
@@ -140,176 +244,108 @@ export default function Chart({
 
                                 ctx.closePath()
                                 ctx.fill()
-                            }
-                        }
-                    ],
-                    regenerateFigures: (params: any) => {
-                        const [length, source, stdDev, offset] = params
-
-                        return [
-                            {
-                                key: 'basis',
-                                type: 'line',
-                                title: 'Basis',
-                                styles: () => {
-                                    const mapped = mapLineStyle(styleSettings.basisStyle)
-                                    return {
-                                        ...mapped,
-                                        color: styleSettings.basisVisible ? styleSettings.basisColor : 'transparent',
-                                        size: styleSettings.basisWidth
-                                    }
-                                }
                             },
-                            {
-                                key: 'upper',
-                                type: 'line',
-                                title: 'Upper',
-                                styles: () => {
-                                    const mapped = mapLineStyle(styleSettings.upperStyle)
-                                    return {
-                                        ...mapped,
-                                        color: styleSettings.upperVisible ? styleSettings.upperColor : 'transparent',
-                                        size: styleSettings.upperWidth
-                                    }
-                                }
-                            },
-                            {
-                                key: 'lower',
-                                type: 'line',
-                                title: 'Lower',
-                                styles: () => {
-                                    const mapped = mapLineStyle(styleSettings.lowerStyle)
-                                    return {
-                                        ...mapped,
-                                        color: styleSettings.lowerVisible ? styleSettings.lowerColor : 'transparent',
-                                        size: styleSettings.lowerWidth
-                                    }
-                                }
-                            },
-                            {
-                                key: 'background',
-                                type: 'polygon',
-                                title: 'Background',
-                                styles: () => ({
-                                    color: styleSettings.backgroundVisible
-                                        ? hexToRgba(styleSettings.backgroundColor, styleSettings.backgroundOpacity / 100)
-                                        : 'transparent',
-                                    borderColor: 'transparent'
-                                }),
-                                draw: ({ ctx, data, from, to, styles }) => {
-                                    if (!data || data.length === 0 || !styleSettings.backgroundVisible) return
+                        },
+                    ]
+                },
+            })
 
-                                    ctx.fillStyle = styles.color
-                                    ctx.beginPath()
-
-                                    // Draw upper line
-                                    let started = false
-                                    for (let i = from; i < to; i++) {
-                                        const item = data[i]
-                                        if (item && item.upper !== undefined) {
-                                            const x = item.x
-                                            const y = item.upper
-                                            if (!started) {
-                                                ctx.moveTo(x, y)
-                                                started = true
-                                            } else {
-                                                ctx.lineTo(x, y)
-                                            }
-                                        }
-                                    }
-
-                                    // Draw lower line in reverse
-                                    for (let i = to - 1; i >= from; i--) {
-                                        const item = data[i]
-                                        if (item && item.lower !== undefined) {
-                                            ctx.lineTo(item.x, item.lower)
-                                        }
-                                    }
-
-                                    ctx.closePath()
-                                    ctx.fill()
-                                }
-                            }
-                        ]
-                    }
-                })
-                registeredRef.current = true
-                console.log('[CHART] Bollinger Bands indicator registered')
-            } catch (e) {
-                console.error('[CHART] Failed to register indicator:', e)
-            }
+            registeredRef.current = true
+            console.log('[CHART] Bollinger Bands indicator registered')
+        } catch (err) {
+            console.error('[CHART] Failed to register indicator:', err)
         }
     }, [])
 
-    // Load chart data
     useEffect(() => {
+        let cancelled = false
+
         fetch('/data/ohlcv.json')
-            .then(r => r.json())
-            .then(data => {
-                const formatted = data.ohlcv_data.map((v: any) => ({
-                    open: v.open,
-                    high: v.high,
-                    low: v.low,
-                    close: v.close,
-                    volume: v.Volume,
-                    timestamp: new Date(v.timestamp).getTime()
-                }))
+            .then((r) => r.json())
+            .then((raw) => {
+                if (cancelled) return
+                const parsed = raw as { ohlcv_data?: unknown[] }
+
+                if (!parsed?.ohlcv_data || !Array.isArray(parsed.ohlcv_data)) {
+                    throw new Error('Invalid OHLCV data shape')
+                }
+
+                const formatted = parsed.ohlcv_data.map((v) => {
+                    const item = v as {
+                        open: number
+                        high: number
+                        low: number
+                        close: number
+                        Volume: number
+                        timestamp: string | number
+                    }
+                    return {
+                        open: item.open,
+                        high: item.high,
+                        low: item.low,
+                        close: item.close,
+                        volume: item.Volume,
+                        timestamp: new Date(item.timestamp).getTime(),
+                    }
+                })
                 setChartData(formatted)
+                console.log('[CHART] loaded data points:', formatted.length)
             })
-            .catch(err => console.error('Failed to load chart data:', err))
+            .catch((err) => {
+                console.error('Failed to load chart data:', err)
+            })
+
+        return () => {
+            cancelled = true
+        }
     }, [])
 
-    // Initialize chart
     useEffect(() => {
         if (!chartData) return
 
-        if (chartRef.current) {
+        if (chartRef.current && typeof dispose === 'function') {
             dispose('k-line-chart')
         }
 
-        chartRef.current = init('k-line-chart')
-        chartRef.current.setStyles(settings.dark ? 'dark' : 'light')
-        chartRef.current.applyNewData(chartData)
+        const chart = init('k-line-chart') as unknown as ChartAPI
+        chartRef.current = chart
+
+        if (chartRef.current && typeof chartRef.current.setStyles === 'function') {
+            chartRef.current.setStyles(settings.dark ? 'dark' : 'light')
+        }
+
+        if (chartRef.current && typeof chartRef.current.applyNewData === 'function') {
+            chartRef.current.applyNewData(chartData)
+        }
 
         console.log('[CHART] Chart initialized with', chartData.length, 'data points')
     }, [chartData, settings.dark])
 
-    // Handle indicator
+    const styleKey = useMemo(() => JSON.stringify(styleSettings), [styleSettings])
+
     useEffect(() => {
         const chart = chartRef.current
         if (!chart || !chartData || !registeredRef.current) return
 
-        // Remove existing indicators
-        const existingIndicators = chart.getIndicators?.() || []
-        existingIndicators.forEach((indicator: any) => {
-            if (indicator.name === IND_NAME) {
+        const existing = chart.getIndicators?.() ?? []
+        existing.forEach((indicator) => {
+            if (indicator?.name === IND_NAME && typeof chart.removeIndicator === 'function') {
                 chart.removeIndicator({ id: indicator.id })
             }
         })
 
-        if (showIndicator) {
-            const indicatorId = chart.createIndicator({
+        if (showIndicator && typeof chart.createIndicator === 'function') {
+            const id = chart.createIndicator({
                 name: IND_NAME,
-                calcParams: [settings.length, settings.source, settings.stdDev, settings.offset]
+                calcParams: [settings.length, settings.source, settings.stdDev, settings.offset],
             })
-
-            if (indicatorId) {
-                console.log('[CHART] Bollinger Bands indicator created with ID:', indicatorId)
-            }
+            console.log('[CHART] Bollinger Bands indicator created with ID:', id)
         }
-    }, [
-        showIndicator,
-        settings.length,
-        settings.source,
-        settings.stdDev,
-        settings.offset,
-        JSON.stringify(styleSettings)
-    ])
+    }, [showIndicator, settings.length, settings.source, settings.stdDev, settings.offset, styleKey, chartData])
 
-    // Cleanup
     useEffect(() => {
         return () => {
-            if (chartRef.current) {
+            if (chartRef.current && typeof dispose === 'function') {
                 dispose('k-line-chart')
             }
         }

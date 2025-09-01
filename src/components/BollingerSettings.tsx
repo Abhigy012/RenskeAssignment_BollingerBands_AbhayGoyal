@@ -1,20 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 
-type StyleSettings = {
+type Source = 'open' | 'high' | 'low' | 'close'
+
+export type StyleSettings = {
     basisVisible: boolean
     basisColor: string
     basisWidth: number
-    basisStyle: string
+    basisStyle: 'solid' | 'dashed' | 'dotted'
     upperVisible: boolean
     upperColor: string
     upperWidth: number
-    upperStyle: string
+    upperStyle: 'solid' | 'dashed' | 'dotted'
     lowerVisible: boolean
     lowerColor: string
     lowerWidth: number
-    lowerStyle: string
+    lowerStyle: 'solid' | 'dashed' | 'dotted'
     backgroundVisible: boolean
     backgroundColor: string
     backgroundOpacity: number
@@ -24,8 +26,8 @@ type Props = {
     onClose: () => void
     length: number
     setLength: (val: number) => void
-    source: string
-    setSource: (val: string) => void
+    source: Source
+    setSource: (val: Source) => void
     stdDev: number
     setStdDev: (val: number) => void
     offset: number
@@ -45,11 +47,11 @@ export default function BollingerSettings({
     offset,
     setOffset,
     styleSettings,
-    setStyleSettings
+    setStyleSettings,
 }: Props) {
-    const [activeTab, setActiveTab] = useState('inputs')
+    const [activeTab, setActiveTab] = useState<'inputs' | 'style'>('inputs')
 
-    const handleStyleChange = (key: keyof StyleSettings, value: any) => {
+    const handleStyleChange = <K extends keyof StyleSettings>(key: K, value: StyleSettings[K]) => {
         setStyleSettings({ ...styleSettings, [key]: value })
     }
 
@@ -61,13 +63,13 @@ export default function BollingerSettings({
                 </h3>
                 <button
                     onClick={onClose}
+                    aria-label="Close settings"
                     className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                 >
                     ✕
                 </button>
             </div>
 
-            {/* Tabs */}
             <div className="flex border-b dark:border-gray-700 mb-4">
                 <button
                     className={`px-4 py-2 font-medium transition-colors ${activeTab === 'inputs'
@@ -89,7 +91,6 @@ export default function BollingerSettings({
                 </button>
             </div>
 
-            {/* Tab Content */}
             {activeTab === 'inputs' && (
                 <div className="space-y-4">
                     <div>
@@ -98,9 +99,12 @@ export default function BollingerSettings({
                         </label>
                         <input
                             type="number"
-                            min="1"
+                            min={1}
                             value={length}
-                            onChange={e => setLength(Number(e.target.value))}
+                            onChange={(e) => {
+                                const v = Number(e.target.value)
+                                if (!Number.isNaN(v)) setLength(Math.max(1, Math.floor(v)))
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                     </div>
@@ -124,7 +128,7 @@ export default function BollingerSettings({
                         </label>
                         <select
                             value={source}
-                            onChange={e => setSource(e.target.value)}
+                            onChange={(e) => setSource(e.target.value as Source)}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         >
                             <option value="close">Close</option>
@@ -142,7 +146,10 @@ export default function BollingerSettings({
                             type="number"
                             step="0.1"
                             value={stdDev}
-                            onChange={e => setStdDev(Number(e.target.value))}
+                            onChange={(e) => {
+                                const v = Number(e.target.value)
+                                if (!Number.isNaN(v)) setStdDev(v)
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                     </div>
@@ -154,7 +161,10 @@ export default function BollingerSettings({
                         <input
                             type="number"
                             value={offset}
-                            onChange={e => setOffset(Number(e.target.value))}
+                            onChange={(e) => {
+                                const v = Number(e.target.value)
+                                if (!Number.isNaN(v)) setOffset(Math.floor(v))
+                            }}
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                         />
                     </div>
@@ -163,16 +173,16 @@ export default function BollingerSettings({
 
             {activeTab === 'style' && (
                 <div className="space-y-6">
-                    {/* Basic/Basis Band */}
                     <div>
                         <div className="flex items-center mb-2">
                             <input
+                                id="basis-visible"
                                 type="checkbox"
                                 checked={styleSettings.basisVisible}
-                                onChange={e => handleStyleChange('basisVisible', e.target.checked)}
+                                onChange={(e) => handleStyleChange('basisVisible', e.target.checked)}
                                 className="mr-2"
                             />
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <label htmlFor="basis-visible" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                                 Basic (Middle Band)
                             </label>
                         </div>
@@ -180,21 +190,26 @@ export default function BollingerSettings({
                             <input
                                 type="color"
                                 value={styleSettings.basisColor}
-                                onChange={e => handleStyleChange('basisColor', e.target.value)}
+                                onChange={(e) => handleStyleChange('basisColor', e.target.value)}
                                 className="w-full h-8"
+                                aria-label="Basis color"
                             />
                             <input
                                 type="number"
-                                min="1"
-                                max="10"
+                                min={1}
+                                max={10}
                                 value={styleSettings.basisWidth}
-                                onChange={e => handleStyleChange('basisWidth', Number(e.target.value))}
+                                onChange={(e) => handleStyleChange('basisWidth', Number(e.target.value))}
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Basis width"
                             />
                             <select
                                 value={styleSettings.basisStyle}
-                                onChange={e => handleStyleChange('basisStyle', e.target.value)}
+                                onChange={(e) =>
+                                    handleStyleChange('basisStyle', e.target.value as StyleSettings['basisStyle'])
+                                }
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Basis style"
                             >
                                 <option value="solid">Solid</option>
                                 <option value="dashed">Dashed</option>
@@ -203,16 +218,16 @@ export default function BollingerSettings({
                         </div>
                     </div>
 
-                    {/* Upper Band */}
                     <div>
                         <div className="flex items-center mb-2">
                             <input
+                                id="upper-visible"
                                 type="checkbox"
                                 checked={styleSettings.upperVisible}
-                                onChange={e => handleStyleChange('upperVisible', e.target.checked)}
+                                onChange={(e) => handleStyleChange('upperVisible', e.target.checked)}
                                 className="mr-2"
                             />
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <label htmlFor="upper-visible" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                                 Upper Band
                             </label>
                         </div>
@@ -220,21 +235,24 @@ export default function BollingerSettings({
                             <input
                                 type="color"
                                 value={styleSettings.upperColor}
-                                onChange={e => handleStyleChange('upperColor', e.target.value)}
+                                onChange={(e) => handleStyleChange('upperColor', e.target.value)}
                                 className="w-full h-8"
+                                aria-label="Upper color"
                             />
                             <input
                                 type="number"
-                                min="1"
-                                max="10"
+                                min={1}
+                                max={10}
                                 value={styleSettings.upperWidth}
-                                onChange={e => handleStyleChange('upperWidth', Number(e.target.value))}
+                                onChange={(e) => handleStyleChange('upperWidth', Number(e.target.value))}
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Upper width"
                             />
                             <select
                                 value={styleSettings.upperStyle}
-                                onChange={e => handleStyleChange('upperStyle', e.target.value)}
+                                onChange={(e) => handleStyleChange('upperStyle', e.target.value as StyleSettings['upperStyle'])}
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Upper style"
                             >
                                 <option value="solid">Solid</option>
                                 <option value="dashed">Dashed</option>
@@ -243,16 +261,16 @@ export default function BollingerSettings({
                         </div>
                     </div>
 
-                    {/* Lower Band */}
                     <div>
                         <div className="flex items-center mb-2">
                             <input
+                                id="lower-visible"
                                 type="checkbox"
                                 checked={styleSettings.lowerVisible}
-                                onChange={e => handleStyleChange('lowerVisible', e.target.checked)}
+                                onChange={(e) => handleStyleChange('lowerVisible', e.target.checked)}
                                 className="mr-2"
                             />
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <label htmlFor="lower-visible" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                                 Lower Band
                             </label>
                         </div>
@@ -260,21 +278,24 @@ export default function BollingerSettings({
                             <input
                                 type="color"
                                 value={styleSettings.lowerColor}
-                                onChange={e => handleStyleChange('lowerColor', e.target.value)}
+                                onChange={(e) => handleStyleChange('lowerColor', e.target.value)}
                                 className="w-full h-8"
+                                aria-label="Lower color"
                             />
                             <input
                                 type="number"
-                                min="1"
-                                max="10"
+                                min={1}
+                                max={10}
                                 value={styleSettings.lowerWidth}
-                                onChange={e => handleStyleChange('lowerWidth', Number(e.target.value))}
+                                onChange={(e) => handleStyleChange('lowerWidth', Number(e.target.value))}
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Lower width"
                             />
                             <select
                                 value={styleSettings.lowerStyle}
-                                onChange={e => handleStyleChange('lowerStyle', e.target.value)}
+                                onChange={(e) => handleStyleChange('lowerStyle', e.target.value as StyleSettings['lowerStyle'])}
                                 className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600"
+                                aria-label="Lower style"
                             >
                                 <option value="solid">Solid</option>
                                 <option value="dashed">Dashed</option>
@@ -283,16 +304,16 @@ export default function BollingerSettings({
                         </div>
                     </div>
 
-                    {/* Background Fill */}
                     <div>
                         <div className="flex items-center mb-2">
                             <input
+                                id="bg-visible"
                                 type="checkbox"
                                 checked={styleSettings.backgroundVisible}
-                                onChange={e => handleStyleChange('backgroundVisible', e.target.checked)}
+                                onChange={(e) => handleStyleChange('backgroundVisible', e.target.checked)}
                                 className="mr-2"
                             />
-                            <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            <label htmlFor="bg-visible" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                                 Background Fill
                             </label>
                         </div>
@@ -300,8 +321,9 @@ export default function BollingerSettings({
                             <input
                                 type="color"
                                 value={styleSettings.backgroundColor}
-                                onChange={e => handleStyleChange('backgroundColor', e.target.value)}
+                                onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
                                 className="w-full h-8"
+                                aria-label="Background color"
                             />
                             <div className="flex flex-col">
                                 <label className="text-xs text-gray-500 mb-1">
@@ -309,10 +331,10 @@ export default function BollingerSettings({
                                 </label>
                                 <input
                                     type="range"
-                                    min="0"
-                                    max="100"
+                                    min={0}
+                                    max={100}
                                     value={styleSettings.backgroundOpacity}
-                                    onChange={e => handleStyleChange('backgroundOpacity', Number(e.target.value))}
+                                    onChange={(e) => handleStyleChange('backgroundOpacity', Number(e.target.value))}
                                     className="w-full"
                                 />
                             </div>
