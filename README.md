@@ -1,23 +1,42 @@
-# Bollinger Bands Chart - KLineCharts Implementation
+# Bollinger Bands Chart — findscan-bollinger
 
-A production-ready Bollinger Bands indicator built with React, Next.js, TypeScript, TailwindCSS, and KLineCharts.
+A production-ready **Bollinger Bands** indicator built with **React 19**, **Next.js 15**, **TypeScript**, **TailwindCSS v4**, and **KLineCharts**.
 
-## Project Structure
+---
+
+## 🚀 Overview
+
+This repository implements a polished, TradingView-inspired Bollinger Bands indicator that overlays directly on KLineCharts candles. It focuses on stability, performance, and an accessible UI using Radix components. The demo ships with 200+ OHLCV candles and supports live updates to inputs and styles.
+
+**Stack**
+
+* Next.js 15
+* React 19
+* TypeScript
+* TailwindCSS v4
+* KLineCharts 10.0.0-alpha5
+* Radix UI, Lucide React, React Colorful
+* clsx, tailwind-merge
+* Turbopack for development
+
+---
+
+## 📁 Project Structure
 
 ```
 bollinger-bands-chart/
 ├── app/
 │   ├── globals.css
 │   ├── layout.tsx
-│   └── page.tsx                 # Main page with controls and state management
+│   └── page.tsx         # Main page with controls and state management
 ├── components/
-│   ├── BollingerSettings.tsx    # Settings modal with Inputs/Style tabs
-│   └── Chart.tsx                # Chart wrapper with KLineCharts integration
+│   ├── BollingerSettings.tsx  # Settings modal with Inputs / Style tabs
+│   └── Chart.tsx              # Chart wrapper with KLineCharts integration
 ├── indicators/
-│   └── bollinger.ts             # Bollinger Bands calculation logic
+│   └── bollinger.ts     # Bollinger Bands calculation logic (exported calc)
 ├── public/
 │   └── data/
-│       └── ohlcv.json          # Demo OHLCV data (200+ candles)
+│       └── ohlcv.json   # Demo OHLCV data (200+ candles)
 ├── package.json
 ├── tailwind.config.js
 ├── next.config.js
@@ -26,111 +45,171 @@ bollinger-bands-chart/
 └── README.md
 ```
 
-## Setup & Installation
+---
 
-```bash
-npm install
-npm run dev
-```
+## ✨ Features
 
-## Features
+* Inputs:
 
-### Mandatory Settings (All Implemented)
+  * Length (default: `20`)
+  * MA type: **SMA** (fixed for this assignment)
+  * Source: `Open` | `High` | `Low` | `Close` (default: `Close`)
+  * StdDev Multiplier (default: `2`)
+  * Offset (shift bands by N bars)
+* Style controls:
 
-**Inputs:**
-
-- Length: 20 (default)
-- Basic MA Type: SMA (fixed for this assignment)
-- Source: Close (configurable: Open/High/Low/Close)
-- StdDev Multiplier: 2 (default)
-- Offset: 0 (shifts bands by N bars)
-
-**Style Controls:**
-
-- Basic (middle) band: visibility, color, width, line style
-- Upper band: visibility, color, width, line style
-- Lower band: visibility, color, width, line style
-- Background fill: visibility, color, opacity
-
-### Technical Implementation
-
-**Calculation Method:**
-
-- Basis = SMA(source, length)
-- StdDev = Population standard deviation of last `length` values
-- Upper = Basis + (StdDev multiplier × StdDev)
-- Lower = Basis - (StdDev multiplier × StdDev)
-- Offset: Shifts the entire band series by specified bars
-
-**Libraries Used:**
-
-- KLineCharts: v9.8.5
-- React: ^18.2.0
-- Next.js: ^14.0.0
-- TypeScript: ^5.0.0
-- TailwindCSS: ^3.3.0
-
-## Usage
-
-1. **Add Indicator**: Click "Add Indicator" to display Bollinger Bands
-2. **Settings**: Click "Settings" to open the configuration panel
-3. **Inputs Tab**: Modify length, source, standard deviation multiplier, and offset
-4. **Style Tab**: Customize colors, visibility, line styles, and background fill
-5. **Theme**: Toggle between light and dark modes
-
-## Development Challenges Summary
-
-During implementation, several key challenges were encountered and resolved:
-
-### Chart Integration Issues
-
-- **Indicator Registration**: Multiple registration attempts caused rendering conflicts
-- **Data Format Mismatch**: KLineCharts expected array of objects per bar, not single object with arrays
-- **Rendering Problems**: Bands appeared in separate panes instead of overlaying on candles
-- **Update Mechanism**: Settings changes didn't properly refresh the indicator
-
-### State Management Complexities
-
-- **Re-render Cycles**: Unstable object references caused excessive chart re-initialization
-- **Effect Dependencies**: Over-reactive useEffect dependencies triggered unnecessary updates
-- **Theme Synchronization**: Dark/light mode required both Tailwind classes and chart API calls
-
-### API Version Compatibility
-
-- **Legacy Code Migration**: Older working code broke with newer KLineCharts versions
-- **Method Signatures**: Changes in indicator calc function return format and figure definitions
-- **Cleanup Strategies**: Indicator removal required aggressive cleanup approaches
-
-### UI/UX Refinements
-
-- **Settings Panel**: TradingView-inspired interface with proper input validation
-- **Responsive Design**: Chart sizing and settings panel positioning
-- **Visual Feedback**: Immediate updates on setting changes without page refresh
-
-## Key Solutions Implemented
-
-1. **Stable Registration**: Indicator registered once with useRef tracking
-2. **Proper Data Structure**: calc function returns array of `{basis, upper, lower}` objects
-3. **Dynamic Styling**: Figure styles updated through regenerateFigures callback
-4. **Efficient Updates**: Separated initialization and update effects
-5. **Background Fill**: Custom polygon drawing for area between upper/lower bands
-
-## Performance
-
-- Smooth interaction on 200-1000 candles
-- Instantaneous settings updates
-- No jank during theme switching or parameter changes
-
-## Browser Compatibility
-
-Tested on modern browsers supporting ES6+ features. Chart renders at 600px height with responsive width.
+  * Middle/Upper/Lower band visibility, color, width, line style
+  * Background fill between upper & lower bands with opacity
+* Theme: Light / Dark toggle
+* Real-time updates without full page reload
+* Responsive chart sizing with 600px default height
+* Stable single-time registration of indicator with KLineCharts
 
 ---
 
-**Assignment completed within requirements:**
-✅ All mandatory inputs and style settings  
-✅ KLineCharts-only implementation  
-✅ Production-ready code quality  
-✅ TradingView-inspired UI  
-✅ Real-time parameter updates  
-✅ Dark/light theme support
+## 🧮 Calculation (Implementation details)
+
+The calculation conforms to the classic Bollinger Bands definition used in charting packages:
+
+```
+Basis  = SMA(source, length)
+StdDev = populationStdDev(last length source values)
+Upper  = Basis + (StdDevMultiplier * StdDev)
+Lower  = Basis - (StdDevMultiplier * StdDev)
+```
+
+The `indicators/bollinger.ts` exports a `calcBollinger` function which accepts an array of numbers (the chosen `source` per candle) and indicator params, and returns an object shaped like:
+
+```ts
+{
+  basis: Array<number | null>,
+  upper: Array<number | null>,
+  lower: Array<number | null>,
+}
+```
+
+Nulls are used for the initial `length - 1` entries. The function also supports an `offset` parameter which shifts the entire series by `N` bars.
+
+---
+
+## 🧩 KLineCharts Integration Notes
+
+Key implementation points:
+
+* Register the indicator once using `useRef` to prevent multiple registrations on rerenders.
+* KLineCharts expects an array of bar objects; ensure `ohlcv.json` is transformed into the shape required by the chart before initializing.
+* Return values from the calc function must match the `Figure`/`Data` contracts expected by `KLineCharts` (arrays aligned with the candles array length).
+* Use a custom polygon draw to render background fill between upper & lower bands.
+* When settings change (colors, widths, visibility), call the chart's `regenerateFigures()` or the library equivalent rather than re-registering the indicator.
+* Dispose indicators on unmount to avoid memory leaks and duplicate renders.
+
+---
+
+## 🛠 Setup & Development
+
+> The project uses Turbopack for the dev server in Next.js 15.
+
+```bash
+# install
+npm install
+
+# dev (Turbopack)
+npm run dev
+
+# build
+npm run build
+
+# production start
+npm run start
+```
+
+Scripts in `package.json` (typical):
+
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  }
+}
+```
+
+---
+
+## ⚙️ Configuration & Controls
+
+The Settings modal (`components/BollingerSettings.tsx`) contains two tabs:
+
+* **Inputs** — numeric inputs and selects with validation (min/max ranges). Changes are validated and applied immediately.
+* **Style** — color pickers (React Colorful), toggles for visibility, line style presets (solid / dashed / dotted), and background fill controls (color + opacity).
+
+All changes are stored in React state at `app/page.tsx` and passed to the `Chart` component as props. `Chart` applies these settings to the registered indicator via the chart API.
+
+---
+
+## ✅ Troubleshooting & Gotchas
+
+* **Bands in separate panes**: Ensure the indicator is registered as an overlay (not a separate pane) and that all figure series use the same pane id as the main candle series.
+* **Multiple registrations / duplicate drawings**: Register once (`useRef`) and use `regenerateFigures()` / `updateIndicator()` flows for updates.
+* **Data shape mismatch**: KLineCharts requires `{time, open, high, low, close, volume}` per bar. Convert `ohlcv.json` accordingly.
+* **Style updates not applied**: Apply style changes through the chart's API (e.g., `setStyle` or `regenerateFigures`) rather than re-instantiating the indicator.
+* **Dark/light mode syncing**: Keep Tailwind root classes in sync with chart theme API calls.
+
+---
+
+## 🔧 Example — Using the `bollinger` indicator (pseudo)
+
+```ts
+// indicators/bollinger.ts
+export function calcBollinger(values: number[], length = 20, multiplier = 2, offset = 0) {
+  // returns { basis, upper, lower } aligned with input length
+}
+
+// components/Chart.tsx
+// register once, then call chart.addIndicator or chart.registerIndicator
+// apply style with chart.regenerateFigures({ styles })
+```
+
+---
+
+## 📦 Included Demo Data
+
+`public/data/ohlcv.json` contains 200+ candles for local development and verification. Use it to preview the indicator immediately after running `npm run dev`.
+
+---
+
+## ✅ Completion Checklist (what's implemented)
+
+* All mandatory inputs and style settings
+* KLineCharts-only implementation (no other chart libs)
+* Production-ready code quality and cleanup flows
+* TradingView-inspired settings panel with validation
+* Real-time parameter updates without reload
+* Light/dark theme support
+* Background fill, offset support, and stable registration
+
+---
+
+## 📚 Contributing
+
+If you'd like to contribute:
+
+1. Fork the repo
+2. Create a branch (`feature/xxx`)
+3. Add tests / ensure linting passes
+4. Submit a PR with a clear description of changes
+
+---
+
+## 📝 License
+
+This project is MIT-licensed. See `LICENSE` for details.
+
+---
+
+## Contact
+
+For implementation questions or help integrating in other projects, open an issue or reach out to the maintainer listed in `package.json`.
+---
